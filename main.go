@@ -11,6 +11,8 @@ import (
 	"sync"
 )
 
+const ver string = "v0.2.1"
+
 var port string
 var portRange string
 var parallelCounts int
@@ -25,7 +27,7 @@ func init() {
 	flag.StringVar(&portRange, "r", "", "Range ports, <from>-<to>. eg. 80-8080")
 	flag.IntVar(&parallelCounts, "s", 200, "Parallel scan threads")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "\nUsage: [Options] <IP>\n\neg: ./portscan -r 22-8080 -s 300 127.0.0.1\n\nOptions:\n\n")
+		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP>\neg: gns -r 22-8080 -s 300 127.0.0.1\n\nOptions:\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -109,7 +111,7 @@ func main() {
 			wg.Wait()
 		}
 		if warning {
-			fmt.Println("Warning: too many open sockets, please slow down.")
+			fmt.Fprintf(os.Stderr, "Warning: too many open sockets, please slow down.")
 		}
 	}
 }

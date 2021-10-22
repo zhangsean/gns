@@ -1,3 +1,3 @@
-module portscan
+module gns
 
 go 1.16
