@@ -9,21 +9,23 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 var port string
 var portRange string
 var parallelCounts int
 var all bool
+var debug bool
+var warning bool
 
 func init() {
-	flag.BoolVar(&all, "a", false, "all ports, 1-65535")
-	flag.StringVar(&port, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,8080,8888,50050,55553", "ports")
-	flag.StringVar(&portRange, "r", "", "range ports, <from>-<to>. eg. 80-8080")
-	flag.IntVar(&parallelCounts, "s", 200, "parallel scan threads")
+	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
+	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
+	flag.StringVar(&port, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,5432,6379,8080,8888,50050,55553", "Specify ports")
+	flag.StringVar(&portRange, "r", "", "Range ports, <from>-<to>. eg. 80-8080")
+	flag.IntVar(&parallelCounts, "s", 200, "Parallel scan threads")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "\nUsage: [Options] <IP>\n\neg: ./portscan -r 1-65535 -s 10000 127.0.0.1\n\nOptions:\n\n")
+		fmt.Fprintf(os.Stderr, "\nUsage: [Options] <IP>\n\neg: ./portscan -r 22-8080 -s 300 127.0.0.1\n\nOptions:\n\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -33,7 +35,7 @@ func printPort(port int, state string) {
 	fmt.Println("port " + strconv.Itoa(port) + " is " + state)
 }
 
-func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan *chan int) {
+func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int) {
 	defer wg.Done()
 	tcpAddr := net.TCPAddr{
 		IP:   ip,
@@ -43,16 +45,24 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan *chan int) 
 	if err == nil {
 		printPort(port, "opening")
 		conn.Close()
-	} else if strings.Contains(err.Error(), "connection refused") {
-		// printPort(port, "refused")
-	} else if strings.Contains(err.Error(), "socket: too many open files") {
-		printPort(port, "retrying")
-		time.Sleep(time.Second)
-		checkPort(ip, port, wg, parallelChan)
 	} else {
-		printPort(port, err.Error())
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "connection refused") {
+			errMsg = "refused"
+		} else if strings.Contains(errMsg, "connect: operation timed out") {
+			errMsg = "timeout"
+		} else if strings.Contains(errMsg, "socket: too many open files") {
+			warning = true
+			errMsg = "retrying"
+			wg.Add(1)
+			parallelChan <- 1
+			checkPort(ip, port, wg, parallelChan)
+		}
+		if debug {
+			printPort(port, errMsg)
+		}
 	}
-	<-*parallelChan
+	<-parallelChan
 }
 
 func main() {
@@ -80,7 +90,7 @@ func main() {
 					parallelChan := make(chan int, parallelCounts)
 					for i := startPort; i <= endPort; i++ {
 						parallelChan <- 1
-						go checkPort(ip, i, &wg, &parallelChan)
+						go checkPort(ip, i, &wg, parallelChan)
 					}
 					wg.Wait()
 				}
@@ -93,10 +103,13 @@ func main() {
 				p, err := strconv.Atoi(arr[i])
 				if err == nil {
 					parallelChan <- 1
-					go checkPort(ip, p, &wg, &parallelChan)
+					go checkPort(ip, p, &wg, parallelChan)
 				}
 			}
 			wg.Wait()
+		}
+		if warning {
+			fmt.Println("Warning: too many open sockets, please slow down.")
 		}
 	}
 }
