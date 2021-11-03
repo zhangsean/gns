@@ -14,9 +14,9 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.3.0"
+const ver string = "v0.3.1"
 
-var port string
+var ports string
 var portRange string
 var parallels int
 var all bool
@@ -33,7 +33,7 @@ var tcpAddrs []TCPAddrStatus
 func init() {
 	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
 	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
-	flag.StringVar(&port, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,5432,6379,8080,8888,50050,55553", "Specify ports")
+	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,5432,6379,8080,8888,50050,55553", "Specify ports")
 	flag.StringVar(&portRange, "r", "", "Range ports, <from>-<to>. eg. 80-8080")
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Usage = func() {
@@ -77,14 +77,26 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 
 func main() {
 	args := flag.Args()
-	if len(args) != 1 {
+	ip := net.ParseIP(flag.Arg(0))
+	if len(args) != 1 || ip == nil || strings.Contains(ports, "-") {
 		flag.Usage()
 	} else {
-		ip := net.ParseIP(flag.Arg(0))
-		fmt.Println(ip.String())
 		if all {
 			portRange = "1-65535"
 		}
+		msg := "Scaning port"
+		if portRange != "" {
+			msg += "s " + portRange
+		} else {
+			if strings.Contains(ports, ",") {
+				msg += "s "
+			} else {
+				msg += " "
+			}
+			msg += ports
+		}
+		msg += " on " + ip.String()
+		fmt.Println(msg)
 		wg := sync.WaitGroup{}
 		if portRange != "" {
 			matched, _ := regexp.Match(`^\d+-\d+$`, []byte(portRange))
@@ -111,7 +123,7 @@ func main() {
 			}
 		} else {
 			parallelChan := make(chan int, parallels)
-			arr := strings.Split(port, ",")
+			arr := strings.Split(ports, ",")
 			wg.Add(len(arr))
 			bar := pb.StartNew(len(arr))
 			for i := 0; i < len(arr); i++ {
@@ -125,11 +137,15 @@ func main() {
 			bar.Finish()
 		}
 		fmt.Println("----Scan Result----")
-		sort.Slice(tcpAddrs, func(i, j int) bool {
-			return tcpAddrs[i].Addr.Port < tcpAddrs[j].Addr.Port
-		})
-		for _, t := range tcpAddrs {
-			fmt.Println("Port " + strconv.Itoa(t.Addr.Port) + " is " + t.Status)
+		if !debug && len(tcpAddrs) == 0 {
+			fmt.Println("No opening port")
+		} else {
+			sort.Slice(tcpAddrs, func(i, j int) bool {
+				return tcpAddrs[i].Addr.Port < tcpAddrs[j].Addr.Port
+			})
+			for _, t := range tcpAddrs {
+				fmt.Println("Port " + strconv.Itoa(t.Addr.Port) + " is " + t.Status)
+			}
 		}
 		if warning {
 			fmt.Fprintf(os.Stderr, "Warning: too many open sockets, please slow down.")
