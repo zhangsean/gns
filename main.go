@@ -10,11 +10,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.3.1"
+const ver string = "v0.4.0"
 
 var ports string
 var portRange string
@@ -22,6 +23,9 @@ var parallels int
 var all bool
 var debug bool
 var warning bool
+var ms int64
+var scanCount int
+var mutex sync.Mutex
 
 type TCPAddrStatus struct {
 	Addr   net.TCPAddr
@@ -30,12 +34,19 @@ type TCPAddrStatus struct {
 
 var tcpAddrs []TCPAddrStatus
 
+func Append(tcpStatus TCPAddrStatus) {
+	mutex.Lock()
+	tcpAddrs = append(tcpAddrs, tcpStatus)
+	mutex.Unlock()
+}
+
 func init() {
 	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
 	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
 	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,5432,6379,8080,8888,50050,55553", "Specify ports")
 	flag.StringVar(&portRange, "r", "", "Range ports, <from>-<to>. eg. 80-8080")
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
+	flag.Int64Var(&ms, "t", 200, "Connect timeout, ms")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP>\neg: gns -r 22-8080 -s 300 127.0.0.1\n\nOptions:\n")
 		flag.PrintDefaults()
@@ -49,15 +60,15 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 		IP:   ip,
 		Port: port,
 	}
-	conn, err := net.DialTCP("tcp", nil, &tcpAddr)
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%v:%v", tcpAddr.IP, tcpAddr.Port), time.Duration(ms*int64(time.Millisecond)))
 	if err == nil {
-		tcpAddrs = append(tcpAddrs, TCPAddrStatus{tcpAddr, "opening"})
+		Append(TCPAddrStatus{tcpAddr, "opening"})
 		conn.Close()
 	} else {
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "connection refused") {
 			errMsg = "refused"
-		} else if strings.Contains(errMsg, "connect: operation timed out") {
+		} else if strings.Contains(errMsg, "connect: operation timed out") || strings.Contains(errMsg, "i/o timeout") {
 			errMsg = "timeout"
 		} else if strings.Contains(errMsg, "socket: too many open files") {
 			warning = true
@@ -67,7 +78,7 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			checkPort(ip, port, wg, parallelChan, bar)
 		}
 		if debug {
-			tcpAddrs = append(tcpAddrs, TCPAddrStatus{tcpAddr, errMsg})
+			Append(TCPAddrStatus{tcpAddr, errMsg})
 		}
 	}
 	bar.Increment()
@@ -108,8 +119,9 @@ func main() {
 				if err1 != nil || err2 != nil || startPort < 1 || endPort < 2 || endPort <= startPort || parallels < 1 {
 					flag.Usage()
 				} else {
-					wg.Add(endPort - startPort + 1)
-					bar := pb.StartNew(endPort - startPort + 1)
+					scanCount = endPort - startPort + 1
+					wg.Add(scanCount)
+					bar := pb.StartNew(scanCount)
 					bar.ShowTimeLeft = true
 					parallelChan := make(chan int, parallels)
 					for i := startPort; i <= endPort; i++ {
@@ -123,9 +135,11 @@ func main() {
 		} else {
 			parallelChan := make(chan int, parallels)
 			arr := strings.Split(ports, ",")
-			wg.Add(len(arr))
-			bar := pb.StartNew(len(arr))
-			for i := 0; i < len(arr); i++ {
+			scanCount = len(arr)
+			wg.Add(scanCount)
+			bar := pb.StartNew(scanCount)
+			bar.ShowTimeLeft = true
+			for i := 0; i < scanCount; i++ {
 				p, err := strconv.Atoi(arr[i])
 				if err == nil {
 					parallelChan <- 1
