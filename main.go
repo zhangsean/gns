@@ -52,7 +52,6 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 	conn, err := net.DialTCP("tcp", nil, &tcpAddr)
 	if err == nil {
 		tcpAddrs = append(tcpAddrs, TCPAddrStatus{tcpAddr, "opening"})
-		// printPort(port, "opening")
 		conn.Close()
 	} else {
 		errMsg := err.Error()
