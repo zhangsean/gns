@@ -15,12 +15,13 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.4.0"
+const ver string = "v0.4.1"
 
 var ports string
 var portRange string
 var parallels int
 var all bool
+var showCostTime bool
 var debug bool
 var warning bool
 var ms int64
@@ -42,6 +43,7 @@ func Append(tcpStatus TCPAddrStatus) {
 
 func init() {
 	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
+	flag.BoolVar(&showCostTime, "c", false, "Show network connecting cost time")
 	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
 	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,5432,6379,8080,8888,50050,55553", "Specify ports")
 	flag.StringVar(&portRange, "r", "", "Range ports, <from>-<to>. eg. 80-8080")
@@ -60,9 +62,15 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 		IP:   ip,
 		Port: port,
 	}
+	timeStart := time.Now()
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%v:%v", tcpAddr.IP, tcpAddr.Port), time.Duration(ms*int64(time.Millisecond)))
+	timeCost := time.Since(timeStart).String()
 	if err == nil {
-		Append(TCPAddrStatus{tcpAddr, "opening"})
+		msg := "opening"
+		if showCostTime {
+			msg += " " + timeCost
+		}
+		Append(TCPAddrStatus{tcpAddr, msg})
 		conn.Close()
 	} else {
 		errMsg := err.Error()
@@ -76,6 +84,9 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			wg.Add(1)
 			parallelChan <- 1
 			checkPort(ip, port, wg, parallelChan, bar)
+		}
+		if showCostTime {
+			errMsg += " " + timeCost
 		}
 		if debug {
 			Append(TCPAddrStatus{tcpAddr, errMsg})
