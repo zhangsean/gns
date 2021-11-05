@@ -15,7 +15,7 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.5.0"
+const ver string = "v0.6.0"
 
 var ports string
 var parallels int
