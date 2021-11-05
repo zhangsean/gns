@@ -15,17 +15,15 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.4.1"
+const ver string = "v0.5.0"
 
 var ports string
-var portRange string
 var parallels int
 var all bool
 var showCostTime bool
 var debug bool
 var warning bool
 var ms int64
-var scanCount int
 var mutex sync.Mutex
 
 type TCPAddrStatus struct {
@@ -35,18 +33,25 @@ type TCPAddrStatus struct {
 
 var tcpAddrs []TCPAddrStatus
 
-func Append(tcpStatus TCPAddrStatus) {
+func AppendStatus(tcpStatus TCPAddrStatus) {
 	mutex.Lock()
 	tcpAddrs = append(tcpAddrs, tcpStatus)
 	mutex.Unlock()
+}
+
+var portList []int
+
+func AppendPort(port int) {
+	if port > 0 && port < 65536 {
+		portList = append(portList, port)
+	}
 }
 
 func init() {
 	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
 	flag.BoolVar(&showCostTime, "c", false, "Show network connecting cost time")
 	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
-	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,2222,3000,3306,3389,5432,6379,8080,8888,50050,55553", "Specify ports")
-	flag.StringVar(&portRange, "r", "", "Range ports, <from>-<to>. eg. 80-8080")
+	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,3306,3389,5432,6379,8080", "Specify ports or port range. eg. 80,443,8080 or 80-8080")
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Int64Var(&ms, "t", 200, "Connect timeout, ms")
 	flag.Usage = func() {
@@ -70,7 +75,7 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 		if showCostTime {
 			msg += " " + timeCost
 		}
-		Append(TCPAddrStatus{tcpAddr, msg})
+		AppendStatus(TCPAddrStatus{tcpAddr, msg})
 		conn.Close()
 	} else {
 		errMsg := err.Error()
@@ -89,7 +94,7 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			errMsg += " " + timeCost
 		}
 		if debug {
-			Append(TCPAddrStatus{tcpAddr, errMsg})
+			AppendStatus(TCPAddrStatus{tcpAddr, errMsg})
 		}
 	}
 	bar.Increment()
@@ -97,82 +102,82 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 }
 
 func main() {
-	args := flag.Args()
 	ip := net.ParseIP(flag.Arg(0))
-	if len(args) != 1 || ip == nil || strings.Contains(ports, "-") {
-		flag.Usage()
+	if len(flag.Args()) != 1 || ip == nil {
+		fmt.Fprintln(os.Stderr, "Invalid IP")
+		return
+	}
+
+	if all {
+		ports = "1-65535"
+	}
+	isList, _ := regexp.Match(`^\d[,\d]*$`, []byte(ports))
+	isRange, _ := regexp.Match(`^\d+-\d+$`, []byte(ports))
+	var startPort, endPort int
+	if isRange {
+		portSecs := strings.Split(ports, "-")
+		startPort, _ = strconv.Atoi(portSecs[0])
+		endPort, _ = strconv.Atoi(portSecs[1])
+	}
+	if !isList && !isRange {
+		fmt.Fprintln(os.Stderr, "Invalid ports")
+		return
+	}
+
+	if isRange {
+		if startPort < endPort {
+			for i := startPort; i <= endPort; i++ {
+				AppendPort(i)
+			}
+		} else {
+			for i := endPort; i <= startPort; i++ {
+				AppendPort(i)
+			}
+		}
 	} else {
-		if all {
-			portRange = "1-65535"
+		for _, p := range strings.Split(ports, ",") {
+			port, _ := strconv.Atoi(p)
+			AppendPort(port)
 		}
-		msg := "Scaning port"
-		if portRange != "" {
-			msg += "s " + portRange
-		} else {
-			if strings.Contains(ports, ",") {
-				msg += "s "
-			} else {
-				msg += " "
-			}
-			msg += ports
+	}
+	if len(portList) == 0 {
+		fmt.Fprintln(os.Stderr, "No valid network port to scan, port must between 1 and 65535.")
+		return
+	}
+
+	msg := "Scaning port"
+	if strings.Contains(ports, ",") || strings.Contains(ports, "-") {
+		msg += "s "
+	} else {
+		msg += " "
+	}
+	msg += ports + " on " + ip.String()
+	fmt.Println(msg)
+
+	wg := sync.WaitGroup{}
+	wg.Add(len(portList))
+	bar := pb.StartNew(len(portList))
+	bar.ShowTimeLeft = true
+	parallelChan := make(chan int, parallels)
+	for _, port := range portList {
+		parallelChan <- 1
+		go checkPort(ip, port, &wg, parallelChan, bar)
+	}
+	wg.Wait()
+	bar.Finish()
+
+	fmt.Println("----Scan Result----")
+	if !debug && len(tcpAddrs) == 0 {
+		fmt.Println("No opening port")
+	} else {
+		sort.Slice(tcpAddrs, func(i, j int) bool {
+			return tcpAddrs[i].Addr.Port < tcpAddrs[j].Addr.Port
+		})
+		for _, t := range tcpAddrs {
+			fmt.Println("Port " + strconv.Itoa(t.Addr.Port) + " is " + t.Status)
 		}
-		msg += " on " + ip.String()
-		fmt.Println(msg)
-		wg := sync.WaitGroup{}
-		if portRange != "" {
-			matched, _ := regexp.Match(`^\d+-\d+$`, []byte(portRange))
-			if !matched {
-				flag.Usage()
-			} else {
-				portSecs := strings.Split(portRange, "-")
-				startPort, err1 := strconv.Atoi(portSecs[0])
-				endPort, err2 := strconv.Atoi(portSecs[1])
-				if err1 != nil || err2 != nil || startPort < 1 || endPort < 2 || endPort <= startPort || parallels < 1 {
-					flag.Usage()
-				} else {
-					scanCount = endPort - startPort + 1
-					wg.Add(scanCount)
-					bar := pb.StartNew(scanCount)
-					bar.ShowTimeLeft = true
-					parallelChan := make(chan int, parallels)
-					for i := startPort; i <= endPort; i++ {
-						parallelChan <- 1
-						go checkPort(ip, i, &wg, parallelChan, bar)
-					}
-					wg.Wait()
-					bar.Finish()
-				}
-			}
-		} else {
-			parallelChan := make(chan int, parallels)
-			arr := strings.Split(ports, ",")
-			scanCount = len(arr)
-			wg.Add(scanCount)
-			bar := pb.StartNew(scanCount)
-			bar.ShowTimeLeft = true
-			for i := 0; i < scanCount; i++ {
-				p, err := strconv.Atoi(arr[i])
-				if err == nil {
-					parallelChan <- 1
-					go checkPort(ip, p, &wg, parallelChan, bar)
-				}
-			}
-			wg.Wait()
-			bar.Finish()
-		}
-		fmt.Println("----Scan Result----")
-		if !debug && len(tcpAddrs) == 0 {
-			fmt.Println("No opening port")
-		} else {
-			sort.Slice(tcpAddrs, func(i, j int) bool {
-				return tcpAddrs[i].Addr.Port < tcpAddrs[j].Addr.Port
-			})
-			for _, t := range tcpAddrs {
-				fmt.Println("Port " + strconv.Itoa(t.Addr.Port) + " is " + t.Status)
-			}
-		}
-		if warning {
-			fmt.Fprintf(os.Stderr, "Warning: too many open sockets, please slow down.")
-		}
+	}
+	if warning {
+		fmt.Fprintln(os.Stderr, "Warning: too many open sockets, please slow down.")
 	}
 }
