@@ -55,7 +55,7 @@ func init() {
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Int64Var(&ms, "t", 200, "Connect timeout, ms")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP>\neg: gns -r 22-8080 -s 300 127.0.0.1\n\nOptions:\n")
+		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP or domain>\neg: gns -r 22-8080 -s 300 localhost\n\nOptions:\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -102,9 +102,17 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 }
 
 func main() {
-	ip := net.ParseIP(flag.Arg(0))
+	host := flag.Arg(0)
+	ip := net.ParseIP(host)
+	if ip == nil && len(host) > 0 {
+		addrs, err := net.LookupHost(host)
+		if err == nil {
+			fmt.Printf("%v => %v\n", host, addrs)
+			ip = net.ParseIP(addrs[0])
+		}
+	}
 	if len(flag.Args()) != 1 || ip == nil {
-		fmt.Fprintln(os.Stderr, "Invalid IP")
+		fmt.Fprintln(os.Stderr, "Invalid IP, hostname or domain")
 		return
 	}
 
