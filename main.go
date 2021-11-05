@@ -15,7 +15,7 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.6.0"
+const ver string = "v0.6.1"
 
 var ports string
 var parallels int
@@ -68,7 +68,7 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 		Port: port,
 	}
 	timeStart := time.Now()
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%v:%v", tcpAddr.IP, tcpAddr.Port), time.Duration(ms*int64(time.Millisecond)))
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("[%v]:%v", tcpAddr.IP, tcpAddr.Port), time.Duration(ms*int64(time.Millisecond)))
 	timeCost := time.Since(timeStart).String()
 	if err == nil {
 		msg := "opening"
@@ -105,10 +105,10 @@ func main() {
 	host := flag.Arg(0)
 	ip := net.ParseIP(host)
 	if ip == nil && len(host) > 0 {
-		addrs, err := net.LookupHost(host)
+		ips, err := net.LookupIP(host)
 		if err == nil {
-			fmt.Printf("%v => %v\n", host, addrs)
-			ip = net.ParseIP(addrs[0])
+			fmt.Printf("%v => %v\n", host, ips)
+			ip = ips[0]
 		}
 	}
 	if len(flag.Args()) != 1 || ip == nil {
