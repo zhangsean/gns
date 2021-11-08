@@ -67,7 +67,7 @@ func init() {
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Int64Var(&ms, "t", 200, "Connect timeout, ms")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP or domain>\neg: gns -r 22-8080 -s 300 localhost\n\nOptions:\n")
+		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP range or domain>\neg: gns -r 22-8080 -s 300 10.0.1.1-100\n\nOptions:\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
