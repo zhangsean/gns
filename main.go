@@ -15,7 +15,7 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.6.1"
+const ver string = "v0.7.0"
 
 var ports string
 var parallels int
@@ -31,20 +31,32 @@ type TCPAddrStatus struct {
 	Status string
 }
 
-var tcpAddrs []TCPAddrStatus
+var resAddrs []TCPAddrStatus
 
 func AppendStatus(tcpStatus TCPAddrStatus) {
 	mutex.Lock()
-	tcpAddrs = append(tcpAddrs, tcpStatus)
+	resAddrs = append(resAddrs, tcpStatus)
 	mutex.Unlock()
 }
 
-var portList []int
-
-func AppendPort(port int) {
-	if port > 0 && port < 65536 {
-		portList = append(portList, port)
+func IPStringToInt(ipString string) int {
+	ipSegs := strings.Split(ipString, ".")
+	var ipInt int = 0
+	var pos uint = 24
+	for _, ipSeg := range ipSegs {
+		tempInt, _ := strconv.Atoi(ipSeg)
+		tempInt = tempInt << pos
+		ipInt = ipInt | tempInt
+		pos -= 8
 	}
+	return ipInt
+}
+
+func AppendPort(ports []int, port int) []int {
+	if port > 0 && port < 65536 {
+		ports = append(ports, port)
+	}
+	return ports
 }
 
 func init() {
@@ -102,16 +114,40 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 }
 
 func main() {
+	var aimIPs []net.IP
 	host := flag.Arg(0)
 	ip := net.ParseIP(host)
-	if ip == nil && len(host) > 0 {
-		ips, err := net.LookupIP(host)
-		if err == nil {
-			fmt.Printf("%v => %v\n", host, ips)
-			ip = ips[0]
+	if ip != nil {
+		aimIPs = append(aimIPs, ip)
+	} else if len(host) > 0 {
+		isIPRange, _ := regexp.Match(`^(\d{1,3}\.){3}\d{1,3}-\d{1,3}$`, []byte(host))
+		if isIPRange {
+			ipSpecs := strings.Split(host, ".")
+			rangeSpecs := strings.Split(ipSpecs[3], "-")
+			startNum, _ := strconv.Atoi(rangeSpecs[0])
+			endNum, _ := strconv.Atoi(rangeSpecs[1])
+			if startNum > endNum {
+				tmp := endNum
+				endNum = startNum
+				startNum = tmp
+			}
+			ipSpecs = ipSpecs[:len(ipSpecs)-1]
+			for i := startNum; i <= endNum; i++ {
+				tmpIPSpecs := append(ipSpecs, strconv.Itoa(i))
+				tmpIp := net.ParseIP(strings.Join(tmpIPSpecs, "."))
+				if tmpIp != nil {
+					aimIPs = append(aimIPs, tmpIp)
+				}
+			}
+		} else {
+			ips, err := net.LookupIP(host)
+			if err == nil && len(ips) > 0 {
+				fmt.Printf("%v => %v\n", host, ips)
+				aimIPs = append(aimIPs, ips[0])
+			}
 		}
 	}
-	if len(flag.Args()) != 1 || ip == nil {
+	if len(flag.Args()) != 1 || len(aimIPs) == 0 {
 		fmt.Fprintln(os.Stderr, "Invalid IP, hostname or domain")
 		return
 	}
@@ -132,23 +168,23 @@ func main() {
 		return
 	}
 
+	var aimPorts []int
 	if isRange {
-		if startPort < endPort {
-			for i := startPort; i <= endPort; i++ {
-				AppendPort(i)
-			}
-		} else {
-			for i := endPort; i <= startPort; i++ {
-				AppendPort(i)
-			}
+		if startPort > endPort {
+			tmpPort := endPort
+			endPort = startPort
+			startPort = tmpPort
+		}
+		for i := startPort; i <= endPort; i++ {
+			aimPorts = AppendPort(aimPorts, i)
 		}
 	} else {
 		for _, p := range strings.Split(ports, ",") {
 			port, _ := strconv.Atoi(p)
-			AppendPort(port)
+			aimPorts = AppendPort(aimPorts, port)
 		}
 	}
-	if len(portList) == 0 {
+	if len(aimPorts) == 0 {
 		fmt.Fprintln(os.Stderr, "No valid network port to scan, port must between 1 and 65535.")
 		return
 	}
@@ -159,30 +195,33 @@ func main() {
 	} else {
 		msg += " "
 	}
-	msg += ports + " on " + ip.String()
-	fmt.Println(msg)
+	msg += ports + " on"
+	fmt.Println(msg, aimIPs)
 
+	scanCount := len(aimIPs) * len(aimPorts)
 	wg := sync.WaitGroup{}
-	wg.Add(len(portList))
-	bar := pb.StartNew(len(portList))
+	wg.Add(scanCount)
+	bar := pb.StartNew(scanCount)
 	bar.ShowTimeLeft = true
 	parallelChan := make(chan int, parallels)
-	for _, port := range portList {
-		parallelChan <- 1
-		go checkPort(ip, port, &wg, parallelChan, bar)
+	for _, ip := range aimIPs {
+		for _, port := range aimPorts {
+			parallelChan <- 1
+			go checkPort(ip, port, &wg, parallelChan, bar)
+		}
 	}
 	wg.Wait()
 	bar.Finish()
 
 	fmt.Println("----Scan Result----")
-	if !debug && len(tcpAddrs) == 0 {
+	if !debug && len(resAddrs) == 0 {
 		fmt.Println("No opening port")
 	} else {
-		sort.Slice(tcpAddrs, func(i, j int) bool {
-			return tcpAddrs[i].Addr.Port < tcpAddrs[j].Addr.Port
+		sort.SliceStable(resAddrs, func(i, j int) bool {
+			return IPStringToInt(resAddrs[i].Addr.IP.String())*65536+resAddrs[i].Addr.Port < IPStringToInt(resAddrs[j].Addr.IP.String())*65536+resAddrs[j].Addr.Port
 		})
-		for _, t := range tcpAddrs {
-			fmt.Println("Port " + strconv.Itoa(t.Addr.Port) + " is " + t.Status)
+		for _, t := range resAddrs {
+			fmt.Println(t.Addr.String() + " : " + t.Status)
 		}
 	}
 	if warning {
