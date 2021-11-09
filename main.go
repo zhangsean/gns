@@ -15,7 +15,7 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.8.0"
+const ver string = "v0.8.1"
 
 var ports string
 var parallels int
@@ -25,6 +25,8 @@ var debug bool
 var warning bool
 var ms int64
 var mutex sync.Mutex
+var showVer bool
+var showHelp bool
 
 type TCPAddrStatus struct {
 	Addr   net.TCPAddr
@@ -75,9 +77,14 @@ func init() {
 	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,3306,3389,5432,6379,8080", "Specify ports or port range. eg. 80,443,8080 or 80-8080")
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Int64Var(&ms, "t", 200, "Connect timeout, ms")
+	flag.BoolVar(&showHelp, "h", false, "Show help")
+	flag.BoolVar(&showVer, "v", false, "Show version")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n\nUsage: gns [Options] <IP range or domain>\neg: gns -r 22-8080 -s 300 10.0.1.1-100\n\nOptions:\n")
-		flag.PrintDefaults()
+		fmt.Fprintf(os.Stdout, "Go network scan tool.\nVersion: "+ver+"\n")
+		if !showVer {
+			fmt.Fprintf(os.Stdout, "\nUsage: gns [Options] <IP range or domain>\neg: gns -p 22-8080 -s 300 10.0.1.1-100\n\nOptions:\n")
+			flag.PrintDefaults()
+		}
 	}
 	flag.Parse()
 }
@@ -123,6 +130,10 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 }
 
 func main() {
+	if showHelp || showVer {
+		flag.Usage()
+		return
+	}
 	var aimIPs []net.IP
 	host := flag.Arg(0)
 	if len(host) == 0 {
