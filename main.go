@@ -15,7 +15,7 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.7.0"
+const ver string = "v0.8.0"
 
 var ports string
 var parallels int
@@ -50,6 +50,15 @@ func IPStringToInt(ipString string) int {
 		pos -= 8
 	}
 	return ipInt
+}
+
+func IPIntToString(ipInt int) string {
+	ipSecs := make([]string, 4)
+	for i := 0; i < 4; i++ {
+		ipSecs[3-i] = strconv.Itoa(ipInt & 0xFF)
+		ipInt >>= 8
+	}
+	return strings.Join(ipSecs, ".")
 }
 
 func AppendPort(ports []int, port int) []int {
@@ -116,38 +125,49 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 func main() {
 	var aimIPs []net.IP
 	host := flag.Arg(0)
-	ip := net.ParseIP(host)
-	if ip != nil {
+	if len(host) == 0 {
+		flag.Usage()
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil {
 		aimIPs = append(aimIPs, ip)
-	} else if len(host) > 0 {
-		isIPRange, _ := regexp.Match(`^(\d{1,3}\.){3}\d{1,3}-\d{1,3}$`, []byte(host))
-		if isIPRange {
-			ipSpecs := strings.Split(host, ".")
-			rangeSpecs := strings.Split(ipSpecs[3], "-")
-			startNum, _ := strconv.Atoi(rangeSpecs[0])
-			endNum, _ := strconv.Atoi(rangeSpecs[1])
-			if startNum > endNum {
-				tmp := endNum
-				endNum = startNum
-				startNum = tmp
-			}
-			ipSpecs = ipSpecs[:len(ipSpecs)-1]
-			for i := startNum; i <= endNum; i++ {
-				tmpIPSpecs := append(ipSpecs, strconv.Itoa(i))
-				tmpIp := net.ParseIP(strings.Join(tmpIPSpecs, "."))
-				if tmpIp != nil {
-					aimIPs = append(aimIPs, tmpIp)
-				}
-			}
-		} else {
-			ips, err := net.LookupIP(host)
-			if err == nil && len(ips) > 0 {
-				fmt.Printf("%v => %v\n", host, ips)
-				aimIPs = append(aimIPs, ips[0])
+	} else if ip, ipNet, _ := net.ParseCIDR(host); ipNet != nil {
+		fmt.Printf("IP CIDR: %v, %v\n", ip, ipNet)
+		for i := IPStringToInt(ip.String()); i > 0; i++ {
+			tmpIP := net.ParseIP(IPIntToString(i))
+			if ipNet.IP.Equal(tmpIP) {
+				continue
+			} else if ipNet.Contains(tmpIP) && !tmpIP.IsLoopback() && !tmpIP.IsMulticast() && !tmpIP.IsUnspecified() {
+				aimIPs = append(aimIPs, tmpIP)
+			} else {
+				break
 			}
 		}
+	} else if isIPRange, _ := regexp.Match(`^(\d{1,3}\.){3}\d{1,3}-\d{1,3}$`, []byte(host)); isIPRange {
+		ipSpecs := strings.Split(host, ".")
+		rangeSpecs := strings.Split(ipSpecs[3], "-")
+		startNum, _ := strconv.Atoi(rangeSpecs[0])
+		endNum, _ := strconv.Atoi(rangeSpecs[1])
+		if startNum > endNum {
+			tmp := endNum
+			endNum = startNum
+			startNum = tmp
+		}
+		ipSpecs = ipSpecs[:len(ipSpecs)-1]
+		for i := startNum; i <= endNum; i++ {
+			tmpIPSpecs := append(ipSpecs, strconv.Itoa(i))
+			if tmpIp := net.ParseIP(strings.Join(tmpIPSpecs, ".")); tmpIp != nil {
+				aimIPs = append(aimIPs, tmpIp)
+			}
+		}
+	} else {
+		ips, err := net.LookupIP(host)
+		if err == nil && len(ips) > 0 {
+			fmt.Printf("Resolving %v => %v\n", host, ips)
+			aimIPs = append(aimIPs, ips[0])
+		}
 	}
-	if len(flag.Args()) != 1 || len(aimIPs) == 0 {
+	if len(aimIPs) == 0 {
 		fmt.Fprintln(os.Stderr, "Invalid IP, hostname or domain")
 		return
 	}
