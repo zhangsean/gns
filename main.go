@@ -15,7 +15,7 @@ import (
 	"github.com/cheggaaa/pb"
 )
 
-const ver string = "v0.8.1"
+const ver string = "v0.8.2"
 
 var ports string
 var parallels int
@@ -28,6 +28,7 @@ var mutex sync.Mutex
 var showVer bool
 var showHelp bool
 
+// TCPAddrStatus TCPAddr with scan result
 type TCPAddrStatus struct {
 	Addr   net.TCPAddr
 	Status string
@@ -35,12 +36,14 @@ type TCPAddrStatus struct {
 
 var resAddrs []TCPAddrStatus
 
+// AppendStatus Append scan result with lock
 func AppendStatus(tcpStatus TCPAddrStatus) {
 	mutex.Lock()
 	resAddrs = append(resAddrs, tcpStatus)
 	mutex.Unlock()
 }
 
+// IPStringToInt Convert IP string to int
 func IPStringToInt(ipString string) int {
 	ipSegs := strings.Split(ipString, ".")
 	var ipInt int = 0
@@ -54,6 +57,7 @@ func IPStringToInt(ipString string) int {
 	return ipInt
 }
 
+// IPIntToString Convert IP int to string
 func IPIntToString(ipInt int) string {
 	ipSecs := make([]string, 4)
 	for i := 0; i < 4; i++ {
@@ -63,6 +67,7 @@ func IPIntToString(ipInt int) string {
 	return strings.Join(ipSecs, ".")
 }
 
+// AppendPort Append scan aim port with checking valid
 func AppendPort(ports []int, port int) []int {
 	if port > 0 && port < 65536 {
 		ports = append(ports, port)
@@ -167,8 +172,8 @@ func main() {
 		ipSpecs = ipSpecs[:len(ipSpecs)-1]
 		for i := startNum; i <= endNum; i++ {
 			tmpIPSpecs := append(ipSpecs, strconv.Itoa(i))
-			if tmpIp := net.ParseIP(strings.Join(tmpIPSpecs, ".")); tmpIp != nil {
-				aimIPs = append(aimIPs, tmpIp)
+			if tmpIP := net.ParseIP(strings.Join(tmpIPSpecs, ".")); tmpIP != nil {
+				aimIPs = append(aimIPs, tmpIP)
 			}
 		}
 	} else {
