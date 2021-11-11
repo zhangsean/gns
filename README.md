@@ -19,11 +19,12 @@ go get -u github.com/zhangsean/gns
 
 ```sh
 Go network scan tool.
-Version: v0.8.2
+Version: v0.8.3
 
 Usage: gns [Options] <IP range or domain>
 eg: gns -p 22-8080 -s 300 10.0.1.1-100
-eg: gns -p 80,443 -t 500 10.0.1.0/24
+    gns -p 80,443 -t 500 10.0.1.0/24
+    gns www.google.com
 
 Options:
   -a    All ports, 1-65535
@@ -35,6 +36,6 @@ Options:
   -s int
         Parallel scan threads (default 200)
   -t int
-        Connect timeout, ms (default 200)
+        Connect timeout, ms (default 1000)
   -v    Show version
 ```
