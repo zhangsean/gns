@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/cheggaaa/pb"
@@ -91,10 +92,11 @@ func init() {
 			flag.PrintDefaults()
 		}
 	}
+	testing.Init()
 	flag.Parse()
 }
 
-func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, bar *pb.ProgressBar) {
+func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, bar *pb.ProgressBar) {
 	defer wg.Done()
 	tcpAddr := net.TCPAddr{
 		IP:   ip,
@@ -121,7 +123,7 @@ func checkPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			errMsg = "retrying"
 			wg.Add(1)
 			parallelChan <- 1
-			checkPort(ip, port, wg, parallelChan, bar)
+			CheckPort(ip, port, wg, parallelChan, bar)
 		}
 		if showCostTime {
 			errMsg += " " + timeCost
@@ -243,7 +245,7 @@ func main() {
 	for _, ip := range aimIPs {
 		for _, port := range aimPorts {
 			parallelChan <- 1
-			go checkPort(ip, port, &wg, parallelChan, bar)
+			go CheckPort(ip, port, &wg, parallelChan, bar)
 		}
 	}
 	wg.Wait()
