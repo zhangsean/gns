@@ -4,8 +4,8 @@ Pretty fast network scan tool for all platform written in Go, scanning all openi
 
 [![Codecov](https://codecov.io/gh/zhangsean/gns/branch/master/graph/badge.svg)](https://codecov.io/gh/zhangsean/gns)
 [![Go Report Card](https://goreportcard.com/badge/github.com/zhangsean/gns)](https://goreportcard.com/report/github.com/zhangsean/gns)
-[![Maintainability](https://api.codeclimate.com/v1/badges/30d793274607f599e658/maintainability)](https://codeclimate.com/github/zhangsean/gns/maintainability)
-[![CodeScene Code Health](https://codescene.io/projects/13129/status-badges/code-health)](https://codescene.io/projects/13129)
+
+## Quick view
 
 [![asciicast](https://asciinema.org/a/448361.svg)](https://asciinema.org/a/448361)
 
