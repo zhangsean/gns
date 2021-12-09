@@ -9,7 +9,7 @@ builds:
       - amd64
       - arm64
 dockers:
-- image_templates: ["ghcr.io/goreleaser/example:{{ .Version }}"]
+- image_templates: ["docker.io/zhangsean/gns:{{ .Version }}"]
   dockerfile: Dockerfile
   build_flag_templates:
   - --label=org.opencontainers.image.title={{ .ProjectName }}
@@ -22,7 +22,7 @@ dockers:
   - --label=org.opencontainers.image.licenses=MIT
 nfpms:
 - maintainer: Zhang Sean <zxf2342@qq.com>
-  description: Pretty fast network scan tool for all platform written in Go, scanning all opening port in your aim subnet.
+  description: Pretty fast network scan tool written in Go, scan all opening port in your aim IP or subnet.
   homepage: https://github.com/zhangsean/gns
   license: MIT
   formats:
