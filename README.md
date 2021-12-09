@@ -26,7 +26,7 @@ docker run -it --rm zhangsean/gns -p 80,443 10.0.1.1
 
 * Manual install
 
-Download build from [releases](https://github.com/zhangsean/gns/releases/latest)
+Download pre build packages from [releases](https://github.com/zhangsean/gns/releases/latest)
 
 ## Usage
 
