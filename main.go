@@ -96,6 +96,7 @@ func init() {
 	flag.Parse()
 }
 
+// CheckPort check network port connectable or not
 func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, bar *pb.ProgressBar) {
 	defer wg.Done()
 	tcpAddr := net.TCPAddr{
