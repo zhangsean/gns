@@ -99,6 +99,7 @@ func init() {
 // CheckPort check network port connectable or not
 func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, bar *pb.ProgressBar) {
 	defer wg.Done()
+	var needRetry bool
 	tcpAddr := net.TCPAddr{
 		IP:   ip,
 		Port: port,
@@ -121,10 +122,8 @@ func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			errMsg = "timeout"
 		} else if strings.Contains(errMsg, "socket: too many open files") {
 			warning = true
+			needRetry = true
 			errMsg = "retrying"
-			wg.Add(1)
-			parallelChan <- 1
-			CheckPort(ip, port, wg, parallelChan, bar)
 		}
 		if showCostTime {
 			errMsg += " " + timeCost
@@ -133,8 +132,14 @@ func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			AppendStatus(TCPAddrStatus{tcpAddr, errMsg})
 		}
 	}
-	bar.Increment()
-	<-parallelChan
+	// 如果开太多socket需要重试
+	if needRetry {
+		wg.Add(1)
+		CheckPort(ip, port, wg, parallelChan, bar)
+	} else {
+		bar.Increment()
+		<-parallelChan
+	}
 }
 
 func main() {
