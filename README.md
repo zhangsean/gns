@@ -1,6 +1,6 @@
 # gns
 
-Pretty fast network scan tool for all platform written in Go, scanning all opening port in your aim subnet.
+A pretty fast network scan tool written with golang, it scans all opening ports on the target network.
 
 [![Codecov](https://codecov.io/gh/zhangsean/gns/branch/master/graph/badge.svg)](https://codecov.io/gh/zhangsean/gns)
 [![Go Report Card](https://goreportcard.com/badge/github.com/zhangsean/gns)](https://goreportcard.com/report/github.com/zhangsean/gns)
@@ -11,9 +11,13 @@ Pretty fast network scan tool for all platform written in Go, scanning all openi
 
 ## Install
 
+#### With go
 ```sh
 go get -u github.com/zhangsean/gns
 ```
+
+#### Manual install
+Download build from [releases](https://github.com/zhangsean/gns/releases/latest)
 
 ## Usage
 
