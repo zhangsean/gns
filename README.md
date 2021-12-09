@@ -11,12 +11,21 @@ A pretty fast network scan tool written with golang, it scans all opening ports 
 
 ## Install
 
-#### With go
+* With go
+
 ```sh
 go get -u github.com/zhangsean/gns
 ```
 
-#### Manual install
+* With docker
+
+```sh
+docker pull zhangsean/gns
+docker run -it --rm zhangsean/gns -p 80,443 10.0.1.1
+```
+
+* Manual install
+
 Download build from [releases](https://github.com/zhangsean/gns/releases/latest)
 
 ## Usage
