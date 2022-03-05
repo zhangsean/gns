@@ -132,7 +132,7 @@ func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 			AppendStatus(TCPAddrStatus{tcpAddr, errMsg})
 		}
 	}
-	// 如果开太多socket需要重试
+	// Too many open socket got error, need retry
 	if needRetry {
 		wg.Add(1)
 		CheckPort(ip, port, wg, parallelChan, bar)
