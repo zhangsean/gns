@@ -18,7 +18,7 @@ import (
 	"github.com/go-ping/ping"
 )
 
-const ver string = "v0.9.0"
+const ver string = "v0.9.1"
 
 var ports string
 var parallels int
@@ -83,7 +83,7 @@ func init() {
 	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
 	flag.BoolVar(&showCostTime, "c", false, "Show network connecting cost time")
 	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
-	flag.BoolVar(&isPing, "ping", false, "Ping check")
+	flag.BoolVar(&isPing, "g", false, "Ping check")
 	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,3306,3389,5432,6379,8080", "Specify ports or port range. eg. 80,443,8080 or 80-8080")
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Int64Var(&ms, "t", 1000, "Connect timeout, ms")
