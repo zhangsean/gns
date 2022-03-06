@@ -17,11 +17,6 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Tests
-      run: |
-        go mod tidy
-        go test -v ./...
-
     - name: Validates GO releaser config
       uses: goreleaser/goreleaser-action@v2
       with:
