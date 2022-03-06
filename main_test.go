@@ -118,3 +118,32 @@ func TestCheckPort(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckPing(t *testing.T) {
+	type args struct {
+		ip           net.IP
+		wg           *sync.WaitGroup
+		parallelChan chan int
+		bar          *pb.ProgressBar
+	}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	pc := make(chan int, 1)
+	pc <- 1
+	pb := pb.New(1)
+	tests := []struct {
+		name string
+		args args
+	}{
+		{"first", args{net.ParseIP("127.0.0.1"), wg, pc, pb}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cnt := len(resAddrs)
+			CheckPing(tt.args.ip, tt.args.wg, tt.args.parallelChan, tt.args.bar)
+			if got := len(resAddrs) - cnt; got != 1 {
+				t.Errorf("checkPing() = %v, want %v", got, 1)
+			}
+		})
+	}
+}

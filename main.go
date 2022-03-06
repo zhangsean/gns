@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,15 +15,17 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb"
+	"github.com/go-ping/ping"
 )
 
-const ver string = "v0.8.4"
+const ver string = "v0.9.0"
 
 var ports string
 var parallels int
 var all bool
 var showCostTime bool
 var debug bool
+var isPing bool
 var warning bool
 var ms int64
 var mutex sync.Mutex
@@ -80,6 +83,7 @@ func init() {
 	flag.BoolVar(&all, "a", false, "All ports, 1-65535")
 	flag.BoolVar(&showCostTime, "c", false, "Show network connecting cost time")
 	flag.BoolVar(&debug, "d", false, "Debug, show every scan result, instead of show opening port only")
+	flag.BoolVar(&isPing, "ping", false, "Ping check")
 	flag.StringVar(&ports, "p", "21,22,23,53,80,135,139,443,445,1080,1433,1521,3306,3389,5432,6379,8080", "Specify ports or port range. eg. 80,443,8080 or 80-8080")
 	flag.IntVar(&parallels, "s", 200, "Parallel scan threads")
 	flag.Int64Var(&ms, "t", 1000, "Connect timeout, ms")
@@ -142,6 +146,43 @@ func CheckPort(ip net.IP, port int, wg *sync.WaitGroup, parallelChan chan int, b
 	}
 }
 
+// CheckPing ping ip
+func CheckPing(ip net.IP, wg *sync.WaitGroup, parallelChan chan int, bar *pb.ProgressBar) {
+	defer wg.Done()
+	var msg string = "ping "
+	pinger, err := ping.NewPinger(ip.String())
+	if err != nil {
+		msg = err.Error()
+	} else {
+		pinger.Timeout = 1000 * time.Millisecond
+		if runtime.GOOS == "windows" {
+			pinger.SetPrivileged(true)
+		}
+		pinger.Count = 3
+		err = pinger.Run() // Block until finished.
+		if err != nil {
+			msg = err.Error()
+		} else {
+			stats := pinger.Statistics() // get send/receive/duplicate/rtt stats
+			if stats.PacketsRecv > 0 {
+				msg += fmt.Sprintf("%d/%d %dms", stats.PacketsRecv, stats.PacketsSent, stats.AvgRtt.Milliseconds())
+			} else {
+				msg += "timeout"
+			}
+		}
+	}
+
+	tcpAddr := net.TCPAddr{
+		IP:   ip,
+		Port: 0,
+	}
+	if strings.Contains(msg, "/") || debug {
+		AppendStatus(TCPAddrStatus{tcpAddr, msg})
+	}
+	bar.Increment()
+	<-parallelChan
+}
+
 func main() {
 	if showHelp || showVer {
 		flag.Usage()
@@ -196,62 +237,73 @@ func main() {
 		return
 	}
 
-	if all {
-		ports = "1-65535"
-	}
-	isList, _ := regexp.Match(`^\d[,\d]*$`, []byte(ports))
-	isRange, _ := regexp.Match(`^\d+-\d+$`, []byte(ports))
-	var startPort, endPort int
-	if isRange {
-		portSecs := strings.Split(ports, "-")
-		startPort, _ = strconv.Atoi(portSecs[0])
-		endPort, _ = strconv.Atoi(portSecs[1])
-	}
-	if !isList && !isRange {
-		fmt.Fprintln(os.Stderr, "Invalid ports")
-		return
-	}
-
 	var aimPorts []int
-	if isRange {
-		if startPort > endPort {
-			tmpPort := endPort
-			endPort = startPort
-			startPort = tmpPort
-		}
-		for i := startPort; i <= endPort; i++ {
-			aimPorts = AppendPort(aimPorts, i)
-		}
+	var msg string
+	if isPing {
+		aimPorts = append(aimPorts, 0)
+		msg = "Ping"
 	} else {
-		for _, p := range strings.Split(ports, ",") {
-			port, _ := strconv.Atoi(p)
-			aimPorts = AppendPort(aimPorts, port)
+		if all {
+			ports = "1-65535"
 		}
-	}
-	if len(aimPorts) == 0 {
-		fmt.Fprintln(os.Stderr, "No valid network port to scan, port must between 1 and 65535.")
-		return
-	}
+		isList, _ := regexp.Match(`^\d[,\d]*$`, []byte(ports))
+		isRange, _ := regexp.Match(`^\d+-\d+$`, []byte(ports))
+		var startPort, endPort int
+		if isRange {
+			portSecs := strings.Split(ports, "-")
+			startPort, _ = strconv.Atoi(portSecs[0])
+			endPort, _ = strconv.Atoi(portSecs[1])
+		}
+		if !isList && !isRange {
+			fmt.Fprintln(os.Stderr, "Invalid ports")
+			return
+		}
 
-	msg := "Scaning port"
-	if strings.Contains(ports, ",") || strings.Contains(ports, "-") {
-		msg += "s "
-	} else {
-		msg += " "
+		if isRange {
+			if startPort > endPort {
+				tmpPort := endPort
+				endPort = startPort
+				startPort = tmpPort
+			}
+			for i := startPort; i <= endPort; i++ {
+				aimPorts = AppendPort(aimPorts, i)
+			}
+		} else {
+			for _, p := range strings.Split(ports, ",") {
+				port, _ := strconv.Atoi(p)
+				aimPorts = AppendPort(aimPorts, port)
+			}
+		}
+		if len(aimPorts) == 0 {
+			fmt.Fprintln(os.Stderr, "No valid network port to scan, port must between 1 and 65535.")
+			return
+		}
+
+		msg = "Scaning port"
+		if strings.Contains(ports, ",") || strings.Contains(ports, "-") {
+			msg += "s "
+		} else {
+			msg += " "
+		}
+		msg += ports + " on"
 	}
-	msg += ports + " on"
 	fmt.Println(msg, aimIPs)
 
 	scanCount := len(aimIPs) * len(aimPorts)
-	wg := sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 	wg.Add(scanCount)
 	bar := pb.StartNew(scanCount)
 	bar.ShowTimeLeft = true
 	parallelChan := make(chan int, parallels)
 	for _, ip := range aimIPs {
-		for _, port := range aimPorts {
+		if isPing {
 			parallelChan <- 1
-			go CheckPort(ip, port, &wg, parallelChan, bar)
+			go CheckPing(ip, wg, parallelChan, bar)
+		} else {
+			for _, port := range aimPorts {
+				parallelChan <- 1
+				go CheckPort(ip, port, wg, parallelChan, bar)
+			}
 		}
 	}
 	wg.Wait()
@@ -259,7 +311,11 @@ func main() {
 
 	fmt.Println("----Scan Result----")
 	if !debug && len(resAddrs) == 0 {
-		fmt.Println("No opening port")
+		if isPing {
+			fmt.Println("No reachable IP")
+		} else {
+			fmt.Println("No opening port")
+		}
 	} else {
 		sort.SliceStable(resAddrs, func(i, j int) bool {
 			return IPStringToInt(resAddrs[i].Addr.IP.String())*65536+resAddrs[i].Addr.Port < IPStringToInt(resAddrs[j].Addr.IP.String())*65536+resAddrs[j].Addr.Port
