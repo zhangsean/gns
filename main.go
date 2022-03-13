@@ -287,7 +287,9 @@ func main() {
 		}
 		msg += ports + " on"
 	}
-	fmt.Println(msg, aimIPs)
+	if debug {
+		fmt.Println(msg, aimIPs)
+	}
 
 	scanCount := len(aimIPs) * len(aimPorts)
 	wg := &sync.WaitGroup{}
