@@ -18,7 +18,7 @@ import (
 	"github.com/go-ping/ping"
 )
 
-const ver string = "v0.9.1"
+const ver string = "v0.9.2"
 
 var ports string
 var parallels int
